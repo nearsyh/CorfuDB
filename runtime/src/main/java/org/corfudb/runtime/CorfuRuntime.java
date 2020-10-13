@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -57,6 +58,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -234,6 +236,12 @@ public class CorfuRuntime {
          */
         private Codec.Type codecType = Codec.Type.ZSTD;
 
+        /**
+         * Application specified registry to hook up Corfu metrics into an existing
+         * scraping/reporting mechanism.
+         */
+        private MetricRegistry metricRegistry;
+
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
             int maxWriteSize = Integer.MAX_VALUE;
             int bulkReadSize = 10;
@@ -260,6 +268,7 @@ public class CorfuRuntime {
             int invalidateRetry = 5;
             private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
             private Codec.Type codecType = Codec.Type.ZSTD;
+            private MetricRegistry metricRegistry = null;
 
             public CorfuRuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
                 super.tlsEnabled(tlsEnabled);
@@ -516,6 +525,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder metricRegistry(MetricRegistry metricRegistry) {
+                this.metricRegistry = metricRegistry;
+                return this;
+            }
+
             public CorfuRuntimeParameters build() {
                 CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
                 corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
@@ -569,6 +583,14 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
                 corfuRuntimeParameters.setPriorityLevel(priorityLevel);
                 corfuRuntimeParameters.setCodecType(codecType);
+                if (metricRegistry == null) {
+                    try {
+                        metricRegistry = SharedMetricRegistries.setDefault("default");
+                    } catch (IllegalStateException illegalStateException) { // If JVM already had this set
+                        metricRegistry = SharedMetricRegistries.getDefault();
+                    }
+                }
+                corfuRuntimeParameters.setMetricRegistry(metricRegistry);
                 return corfuRuntimeParameters;
             }
         }
@@ -623,8 +645,10 @@ public class CorfuRuntime {
     @Getter(lazy = true)
     private final ManagementView managementView = new ManagementView(this);
 
-    @Getter(lazy = true)
-    private final TableRegistry tableRegistry = new TableRegistry(this);
+    /**
+     * CorfuStore's table registry cache for Table lifecycle management.
+     */
+    private final AtomicReference<TableRegistry> tableRegistry = new AtomicReference<>(null);
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -710,6 +734,22 @@ public class CorfuRuntime {
         return this;
     }
 
+    /**
+     * lazy instantiation of the tableRegistry
+     */
+    public TableRegistry getTableRegistry() {
+        TableRegistry tableRegistryObj = this.tableRegistry.get();
+        if (tableRegistryObj == null) {
+            synchronized (this) {
+                tableRegistryObj = this.tableRegistry.get();
+                if (tableRegistryObj == null) {
+                    tableRegistryObj = new TableRegistry(this);
+                    this.tableRegistry.set(tableRegistryObj);
+                }
+            }
+        }
+        return tableRegistryObj;
+    }
 
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
@@ -837,6 +877,10 @@ public class CorfuRuntime {
     public void shutdown() {
         // Stopping async task from fetching layout.
         isShutdown = true;
+        TableRegistry tableRegistryObj = tableRegistry.get();
+        if (tableRegistryObj != null) {
+            tableRegistryObj.shutdown();
+        }
         garbageCollector.stop();
         runtimeExecutor.shutdownNow();
         if (layout != null) {

@@ -11,12 +11,13 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -135,8 +136,8 @@ public class StreamingIT extends AbstractIT {
         final int numUpdates = 3;
         for (int i = 0; i < numUpdates; i++) {
             Uuid uuid = Uuid.newBuilder().setMsb(i).setLsb(i).build();
-            TxBuilder tx = store.tx("n1");
-            tx.update("t1", uuid, uuid, uuid).commit();
+            TxnContext tx = store.txn("n1");
+            tx.put(n1t1, uuid, uuid, uuid).commit();
         }
 
         // Subscribe to streaming updates from the table.
@@ -166,9 +167,9 @@ public class StreamingIT extends AbstractIT {
         store.subscribe(s2n1t1, "n1",
                 Collections.singletonList(new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class)), null);
 
-        TxBuilder tx = store.tx("n1");
+        TxnContext tx = store.txn("n1");
         Uuid uuid0 = Uuid.newBuilder().setMsb(0).setLsb(0).build();
-        tx.delete("t1", uuid0).commit();
+        tx.delete(n1t1, uuid0).commit();
 
         TimeUnit.SECONDS.sleep(2);
 
@@ -201,9 +202,9 @@ public class StreamingIT extends AbstractIT {
         store.unsubscribe(s1n1t1);
         TimeUnit.SECONDS.sleep(2);
 
-        tx = store.tx("n1");
+        tx = store.txn("n1");
         Uuid uuid1 = Uuid.newBuilder().setMsb(1).setLsb(1).build();
-        tx.delete("t1", uuid1).commit();
+        tx.delete(n1t1, uuid1).commit();
 
         // s1n1t1 should see no new updates, where as s2n1t1 should see the latest delete.
         TimeUnit.SECONDS.sleep(2);
@@ -263,10 +264,10 @@ public class StreamingIT extends AbstractIT {
         final int numUpdates = 3;
         for (int i = 0; i < numUpdates; i++) {
             Uuid uuid = Uuid.newBuilder().setMsb(i).setLsb(i).build();
-            TxBuilder tx = store.tx("n1");
-            tx.update("t1", uuid, uuid, uuid).commit();
-            TxBuilder tx2 = store.tx("n2");
-            tx2.update("t1", uuid, uuid, uuid).commit();
+            TxnContext tx = store.txn("n1");
+            tx.put(n1t1, uuid, uuid, uuid).commit();
+            TxnContext tx2 = store.txn("n2");
+            tx2.put(n2t1, uuid, uuid, uuid).commit();
         }
 
         // Subscribe to streaming updates from the table1.
@@ -278,7 +279,7 @@ public class StreamingIT extends AbstractIT {
         store.subscribe(s2n2t1, "n2",
                 Collections.singletonList(new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class)), ts1);
 
-        // After a brief wait verify that the listener go all the updates.
+        // After a brief wait verify that the listener gets all the updates.
         TimeUnit.SECONDS.sleep(2);
         LinkedList<CorfuStreamEntries> updates = s1n1t1.getUpdates();
         assertThat(updates.size()).isEqualTo(numUpdates);
@@ -308,7 +309,7 @@ public class StreamingIT extends AbstractIT {
             assertThat(entry.get(0).getMetadata()).isEqualTo(uuid);
         }
 
-        // Now clear a table and make sure that the clear gets propogated
+        // Now clear a table and make sure that the clear gets propagated
         n1t1.clear();
 
         // After a brief pause validate that the listener obtains the clear() table SRM update.
@@ -320,6 +321,82 @@ public class StreamingIT extends AbstractIT {
             List<CorfuStreamEntry> entry = update.getEntries().values().stream().findFirst().get();
             assertThat(entry.get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.CLEAR);
         }
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Streaming Test with 2 different tables and a single streamer
+     * <p>
+     * The test creates two tables in the same namespace and makes updates to both in the same transaction.
+     * A single streamer subscribes to updates from both.
+     * <p>
+     * The test verifies that the streamer receives updates from both tables and since the updates were made in
+     * the same transaction, they are received in one CorfuStreamEntry.
+     * @throws Exception
+     */
+    @Test
+    public void testStreamingMultiTableSingleListener() throws Exception {
+        // Run a corfu server
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        runtime.setTransactionLogging(true);
+        CorfuStore store = new CorfuStore(runtime);
+
+        // Record the initial timestamp.
+        Timestamp ts1 = store.getTimestamp();
+
+        // Create 2 tables in the same namespace
+        Table<Uuid, Uuid, Uuid> n1t1 = store.openTable(
+                "n1", "t1", Uuid.class,
+                Uuid.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        Table<Uuid, Uuid, Uuid> n1t2 = store.openTable(
+                "n1", "t2", Uuid.class,
+                Uuid.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Make an update to the tables in a transaction
+        final int t1_uuid = 5;
+        final int t2_uuid = 10;
+        Uuid t1Uuid = Uuid.newBuilder().setMsb(t1_uuid).setLsb(t1_uuid).build();
+        Uuid t2Uuid = Uuid.newBuilder().setMsb(t2_uuid).setLsb(t2_uuid).build();
+        TxnContext txnContext = store.txn("n1");
+        txnContext.put(n1t1, t1Uuid, t1Uuid, t1Uuid);
+        txnContext.put(n1t2, t2Uuid, t2Uuid, t2Uuid);
+        txnContext.commit();
+
+        // Subscribe to both tables
+        List<TableSchema<Uuid, Uuid, Uuid>> tablesSubscribed = new ArrayList<>();
+        TableSchema schema1 = new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class);
+        TableSchema schema2 = new TableSchema("t2", Uuid.class, Uuid.class, Uuid.class);
+        tablesSubscribed.add(schema1);
+        tablesSubscribed.add(schema2);
+        StreamListenerImpl listener = new StreamListenerImpl("n1_listener");
+        store.subscribe(listener, "n1", tablesSubscribed, ts1);
+
+        // Verify that both updates come to the subscriber in the same StreamEntry
+        TimeUnit.SECONDS.sleep(2);
+        LinkedList<CorfuStreamEntries> updates = listener.getUpdates();
+        assertThat(updates.size()).isEqualTo(1);
+        assertThat(updates.getFirst().getEntries().entrySet().size()).isEqualTo(2);
+
+        // Check the entries and operations in each
+        assertThat(updates.getFirst().getEntries().get(schema1).get(0).getKey()).isEqualTo(t1Uuid);
+        assertThat(updates.getFirst().getEntries().get(schema1).get(0).getPayload()).isEqualTo(t1Uuid);
+        assertThat(updates.getFirst().getEntries().get(schema1).get(0).getMetadata()).isEqualTo(t1Uuid);
+        assertThat(updates.getFirst().getEntries().get(schema1).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
+
+        assertThat(updates.getFirst().getEntries().get(schema2).get(0).getKey()).isEqualTo(t2Uuid);
+        assertThat(updates.getFirst().getEntries().get(schema2).get(0).getPayload()).isEqualTo(t2Uuid);
+        assertThat(updates.getFirst().getEntries().get(schema2).get(0).getMetadata()).isEqualTo(t2Uuid);
+        assertThat(updates.getFirst().getEntries().get(schema2).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }

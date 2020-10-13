@@ -3,13 +3,16 @@ package org.corfudb.browser;
 import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -19,8 +22,9 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
@@ -28,6 +32,8 @@ import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.Options;
+
+import com.google.protobuf.util.JsonFormat;
 
 /**
  * This is the CorfuStore Browser Tool which prints data in a given namespace and table.
@@ -133,11 +139,18 @@ public class CorfuStoreBrowser {
                 Iterables.partition(entryStream::iterator, batchSize);
         for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
             for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
-                builder = new StringBuilder("\nKey:\n" + entry.getKey().getKey())
-                        .append("\nPayload:\n").append(entry.getValue().getPayload())
-                        .append("\nMetadata:\n").append(entry.getValue().getMetadata())
-                        .append("\n====================\n");
-                log.info(builder.toString());
+                try {
+                    builder = new StringBuilder("\nKey:\n")
+                            .append(JsonFormat.printer().print(entry.getKey().getKey()))
+                            .append("\nPayload:\n")
+                            .append(JsonFormat.printer().print(entry.getValue().getPayload()))
+                            .append("\nMetadata:\n")
+                            .append(JsonFormat.printer().print(entry.getValue().getMetadata()))
+                            .append("\n====================\n");
+                    log.info(builder.toString());
+                } catch (InvalidProtocolBufferException e) {
+                    log.error("invalid protobuf: ", e);
+                }
             }
         }
         return size;
@@ -209,9 +222,10 @@ public class CorfuStoreBrowser {
      * @param tablename - table name without the namespace
      * @param numItems - total number of items to load
      * @param batchSize - number of items in each transaction
+     * @param itemSize - size of each item - a random string array
      * @return - number of entries in the table
      */
-    public int loadTable(String namespace, String tablename, int numItems, int batchSize) {
+    public int loadTable(String namespace, String tablename, int numItems, int batchSize, int itemSize) {
         verifyNamespaceAndTablename(namespace, tablename);
         CorfuStore store = new CorfuStore(runtime);
         try {
@@ -219,24 +233,34 @@ public class CorfuStoreBrowser {
             if (diskPath != null) {
                 optionsBuilder.persistentDataPath(Paths.get(diskPath));
             }
-            store.openTable(namespace, tablename,
-                    TableName.getDefaultInstance().getClass(),
-                    TableName.getDefaultInstance().getClass(),
-                    TableName.getDefaultInstance().getClass(),
+            final Table<TableName, TableName, TableName> table = store.openTable(
+                    namespace, tablename,
+                    TableName.class,
+                    TableName.class,
+                    TableName.class,
                     optionsBuilder.build());
 
-            TableName dummyVal = TableName.newBuilder().setNamespace(namespace).setTableName(tablename).build();
-            log.info("Loading {} items in {} batchSized transactions into {}${}",
-                    numItems, batchSize, namespace, tablename);
+            byte[] array = new byte[itemSize];
+
+            /*
+             * Random bytes are needed to bypass the compression.
+             * If we don't use random bytes, compression will reduce the size of the payload siginficantly
+             * increasing the time it takes to load data if we are trying to fill up disk.
+             */
+            new Random().nextBytes(array);
+            TableName dummyVal = TableName.newBuilder().setNamespace(namespace+tablename)
+                    .setTableName(new String(array, StandardCharsets.UTF_16)).build();
+            log.info("WARNING: Loading {} items of {} size in {} batchSized transactions into {}${}",
+                    numItems, itemSize, batchSize, namespace, tablename);
             int itemsRemaining = numItems;
             while (itemsRemaining > 0) {
                 log.info("loadTable: Items left {}", itemsRemaining);
-                TxBuilder tx = store.tx(namespace);
+                TxnContext tx = store.txn(namespace);
                 for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
                     TableName dummyKey = TableName.newBuilder()
                             .setNamespace(Integer.toString(itemsRemaining))
                             .setTableName(Integer.toString(j)).build();
-                    tx.update(tablename, dummyKey, dummyVal, dummyVal);
+                    tx.put(table, dummyKey, dummyVal, dummyVal);
                 }
                 tx.commit();
             }
