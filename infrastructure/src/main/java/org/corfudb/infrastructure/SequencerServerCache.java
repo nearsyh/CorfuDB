@@ -121,13 +121,18 @@ public class SequencerServerCache {
 
         int numEntries = 0;
         while (firstAddress() == firstEntry.txVersion) {
-            log.debug("evict items " + numEntries + " with address " + firstAddress());
+            if (log.isTraceEnabled()) {
+                log.trace("evict items " + numEntries + " with address " + firstAddress());
+            }
             ConflictTxStream entry = cacheEntries.poll();
             conflictKeys.remove(entry);
             numEntries++;
         }
 
-        log.trace("Evict {} entries", numEntries);
+        if (log.isTraceEnabled()) {
+            log.trace("Evict {} entries", numEntries);
+        }
+
         maxConflictWildcard = Math.max(maxConflictWildcard, firstEntry.txVersion);
         return numEntries;
     }
