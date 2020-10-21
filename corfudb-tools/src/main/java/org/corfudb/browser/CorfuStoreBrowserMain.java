@@ -26,7 +26,8 @@ public class CorfuStoreBrowserMain {
         loadTable,
         infoTable,
         showTable,
-        dropTable
+        dropTable,
+        editTable
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -42,7 +43,8 @@ public class CorfuStoreBrowserMain {
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable> Operation\n"
+        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable" +
+        "|editTable> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--keystore=<keystore_file> KeyStore File\n"
@@ -138,6 +140,10 @@ public class CorfuStoreBrowserMain {
                     }
                     browser.loadTable(namespace, tableName, numItems, batchSize, itemSize);
                     break;
+                case editTable:
+                    String key = opts.get("--key").toString();
+                    String newValue = opts.get("--newValue").toString();
+                    browser.editTable(namespace, tableName, key, newValue);
             }
         } catch (Throwable t) {
             log.error("Error in Browser Execution.", t);

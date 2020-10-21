@@ -12,10 +12,15 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import com.google.protobuf.Any;
+import com.google.protobuf.Descriptors;
+import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.collections.CorfuDynamicMessage;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
@@ -30,6 +35,7 @@ import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.Options;
 
@@ -268,5 +274,46 @@ public class CorfuStoreBrowser {
             log.error("loadTable: {} {} {} {} failed.", namespace, tablename, numItems, batchSize, e);
         }
         return (int)(Math.ceil((double)numItems/batchSize));
+    }
+
+    public <K extends Message, V extends Message>
+    void editTable(String namespace, String tableName, String key, String newValue) {
+        verifyNamespaceAndTablename(namespace, tableName);
+
+        ISerializer protobufSerializer =
+            new ProtobufSerializer(runtime);
+        Serializers.registerSerializer(protobufSerializer);
+
+        String fullTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+
+        SMRObject.Builder<CorfuTable<K, V>> corfuTableBuilder =
+            runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<K, V>>() {})
+                .setStreamName(fullTableName)
+                .setSerializer(protobufSerializer);
+
+        // Open the table using the Protobuf serializer to get K and V, the
+        // types of key and value protobufs
+        CorfuTable<K, V> table = corfuTableBuilder.open();
+
+        // Using the types, get the typeUrl
+        String typeUrl =
+            ((DynamicMessage)V).getDefaultInstance().getPayloadTypeUrl();
+
+        DynamicProtobufSerializer dynamicProtobufSerializer =
+            new DynamicProtobufSerializer(runtime);
+        Descriptors.Descriptor descriptor =
+            dynamicProtobufSerializer.getDescriptor(typeUrl);
+        DynamicMessage dynamicMessage = DynamicMessage.parseFrom(descriptor,
+            newValue.getBytes());
+
+        CorfuDynamicRecord record =
+            new CorfuDynamicRecord(typeUrl, dynamicMessage,
+                typeUrl, dynamicMessage);
+        // TODO pankti: Construct the CorfuDynamicKey also
+
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable =
+            getTable(namespace, tableName);
+        corfuTable.replace(key, record);
     }
 }
