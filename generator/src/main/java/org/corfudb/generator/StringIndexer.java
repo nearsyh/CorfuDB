@@ -29,7 +29,7 @@ public class StringIndexer implements Index.Registry<String, String> {
 
     @Override
     public Optional<Index.Spec<String, String, ? extends Comparable<?>>> get(Index.Name name) {
-        String indexName = (name != null)? name.get() : null;
+        String indexName = (name != null) ? name.get() : null;
 
         if (BY_VALUE.get().equals(indexName)) {
             return Optional.of(BY_VALUE_INDEX);
