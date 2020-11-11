@@ -93,7 +93,7 @@
 
     <profiles>
         <profile>
-            <id>it</id>
+            <id>universe</id>
             <build>
                 <plugins>
                     <plugin>
