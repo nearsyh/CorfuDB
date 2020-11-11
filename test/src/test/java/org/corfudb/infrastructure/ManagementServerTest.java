@@ -15,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getBootstrapLayoutRequestMsg;
 
 /**
  * Checks the various services and messages handled by the
@@ -83,7 +84,7 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void triggerFailureHandler() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
+        sendRequest(getBootstrapLayoutRequestMsg(layout), true, true);
         CompletableFuture<Boolean> future = sendRequestWithClusterId(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
                 new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())),
                 layout.getClusterId());

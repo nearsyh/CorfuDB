@@ -32,14 +32,7 @@ public enum CorfuMsgType {
     WRONG_CLUSTER_ID(28, new TypeToken<CorfuPayloadMsg<WrongClusterMsg>>(){}, true, false),
 
     // Layout Messages
-    LAYOUT_REQUEST(10, new TypeToken<CorfuPayloadMsg<Long>>(){}, true, true),
     LAYOUT_RESPONSE(11, TypeToken.of(LayoutMsg.class), true, false),
-    LAYOUT_PREPARE(12, new TypeToken<CorfuPayloadMsg<LayoutPrepareRequest>>(){}, true, false),
-    LAYOUT_PREPARE_REJECT(13, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}),
-    LAYOUT_PROPOSE(14, new TypeToken<CorfuPayloadMsg<LayoutProposeRequest>>(){}, true, false),
-    LAYOUT_PROPOSE_REJECT(15, new TypeToken<CorfuPayloadMsg<LayoutProposeResponse>>(){}),
-    LAYOUT_COMMITTED(16, new TypeToken<CorfuPayloadMsg<LayoutCommittedRequest>>(){}, true, false),
-    LAYOUT_QUERY(17, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     LAYOUT_BOOTSTRAP(18, new TypeToken<CorfuPayloadMsg<LayoutBootstrapRequest>>(){}, true, true),
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true, false),
 
