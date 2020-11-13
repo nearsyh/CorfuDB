@@ -8,6 +8,7 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 
 import javax.annotation.Nonnull;
+import java.util.List;
 import java.util.NavigableSet;
 import java.util.UUID;
 import java.util.function.Function;
@@ -74,6 +75,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     }
 
     private long backpointerCount = 0L;
+
+    @Override
+    public List<ILogData> remainingAtMost(int maxEntries) {
+        throw new UnsupportedOperationException("remainingAtMost() not " +
+                "supported by backpointer stream view.");
+    }
 
     @Override
     public long getTotalUpdates() {
@@ -177,6 +184,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
 
         return !queue.isEmpty();
+    }
+
+    @Override
+    protected long getMaxGlobalFromMaxEntries(int maxEntries) {
+        return Address.MAX;
     }
 }
 

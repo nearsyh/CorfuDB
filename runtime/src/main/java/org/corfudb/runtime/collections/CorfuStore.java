@@ -1,15 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
-
-import java.lang.reflect.InvocationTargetException;
-import java.util.Collection;
-import java.util.List;
-import java.util.UUID;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -17,6 +8,12 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.view.TableRegistry;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.lang.reflect.InvocationTargetException;
+import java.util.Collection;
+import java.util.List;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
@@ -247,7 +244,7 @@ public class CorfuStore {
      * @param streamListener   callback context
      * @param namespace        the CorfuStore namespace to subscribe to
      * @param tablesOfInterest only updates from these tables of interest will be sent to listener
-     * @param timestamp        if specified, all stream updates from this timestamp will be returned
+     * @param timestamp        if specified, all stream updates after this timestamp will be returned
      *                         if null, only future updates will be returned
      */
     @Deprecated
@@ -272,11 +269,31 @@ public class CorfuStore {
      *                         if null, only future updates will be returned
      */
     public void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                   @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
-                   @Nullable Timestamp timestamp) {
-        runtime.getTableRegistry().getStreamManager()
+                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                          @Nullable Timestamp timestamp) {
+        runtime.getTableRegistry().getStreamingManager()
                 .subscribe(streamListener, namespace, streamTag, tablesOfInterest,
                         (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
+    }
+
+    /**
+     * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
+     * Objects returned will honor transactional boundaries.
+     *
+     * @param streamListener   client listener for callback
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param timestamp        if specified, all stream updates after this timestamp will be returned
+     *                         if null, only future updates will be returned
+     * @param bufferSize       maximum size of buffered transaction entries
+     */
+    public void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                          @Nullable Timestamp timestamp, int bufferSize) {
+        runtime.getTableRegistry().getStreamingManager()
+                .subscribe(streamListener, namespace, streamTag, tablesOfInterest,
+                        (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence(), bufferSize);
     }
 
     /**
@@ -286,7 +303,6 @@ public class CorfuStore {
      * @param streamListener - callback context.
      */
     public void unsubscribe(@Nonnull StreamListener streamListener) {
-        runtime.getTableRegistry().getStreamManager()
-                .unsubscribe(streamListener);
+        runtime.getTableRegistry().getStreamingManager().unsubscribe(streamListener);
     }
 }
