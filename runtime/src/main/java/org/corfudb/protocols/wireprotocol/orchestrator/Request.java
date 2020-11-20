@@ -15,11 +15,4 @@ public interface Request {
      * @return type of request
      */
     OrchestratorRequestType getType();
-
-    /**
-     * Serialize this request into a byte array
-     *
-     * @return serialized bytes of the request
-     */
-    byte[] getSerialized();
 }

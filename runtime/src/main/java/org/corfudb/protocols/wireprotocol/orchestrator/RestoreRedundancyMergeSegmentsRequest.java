@@ -1,10 +1,8 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
-import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.RESTORE_REDUNDANCY_MERGE_SEGMENTS;
-
-import java.nio.charset.StandardCharsets;
-
 import lombok.Getter;
+
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.RESTORE_REDUNDANCY_MERGE_SEGMENTS;
 
 /**
  * An orchestrator request message to restore redundancy and merge all segments in the cluster.
@@ -22,17 +20,8 @@ public class RestoreRedundancyMergeSegmentsRequest implements CreateRequest {
         this.endpoint = endpoint;
     }
 
-    public RestoreRedundancyMergeSegmentsRequest(byte[] buf) {
-        endpoint = new String(buf, StandardCharsets.UTF_8);
-    }
-
     @Override
     public OrchestratorRequestType getType() {
         return RESTORE_REDUNDANCY_MERGE_SEGMENTS;
-    }
-
-    @Override
-    public byte[] getSerialized() {
-        return endpoint.getBytes(StandardCharsets.UTF_8);
     }
 }
