@@ -243,6 +243,19 @@ public class CorfuProtocolCommon {
     }
 
     /**
+     * Returns the Java representation of a {@link StreamAddressRangeMsg} Protobuf object.
+     *
+     * @param streamAddressRangeMsg   the desired Protobuf {@link StreamAddressRangeMsg} object
+     * @return                     an equivalent Java {@link StreamAddressRange} object
+     */
+    public static StreamAddressRange getStreamAddressRange(StreamAddressRangeMsg streamAddressRangeMsg) {
+        return new StreamAddressRange(
+                getUUID(streamAddressRangeMsg.getStreamId()),
+                streamAddressRangeMsg.getStart(),
+                streamAddressRangeMsg.getEnd());
+    }
+
+    /**
      * Returns a StreamAddressResponse object from its log tail and List
      * of address map entries, each consisting of a UUID and a StreamAddressSpace,
      * represented in Protobuf.

@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import org.corfudb.protocols.service.CorfuProtocolSequencer;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
@@ -15,6 +16,11 @@ import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getBootstrapSequencerRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getSequencerTrimRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getStreamsAddressRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getTokenRequestMsg;
 
 /**
  * A sequencer client.
@@ -33,7 +39,8 @@ public class SequencerClient extends AbstractClient {
      * Sends a metrics request to the sequencer server.
      */
     public CompletableFuture<SequencerMetrics> requestMetrics() {
-        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_METRICS_REQUEST.msg());
+        return sendRequestWithFuture(CorfuProtocolSequencer.getSequencerMetricsRequestMsg(),
+                false, true);
     }
 
     /**
@@ -44,8 +51,8 @@ public class SequencerClient extends AbstractClient {
      * @return A completable future with the token response from the sequencer.
      */
     public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens) {
-        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
-                new TokenRequest(numTokens, streamIDs)));
+        return sendRequestWithFuture(getTokenRequestMsg(numTokens, streamIDs),
+                false, false);
     }
 
     /**
@@ -54,9 +61,11 @@ public class SequencerClient extends AbstractClient {
      * @param streamsAddressesRange requested streams and ranges.
      * @return streams address maps in the given range.
      */
-    public CompletableFuture<StreamsAddressResponse> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
-        return sendMessageWithFuture(CorfuMsgType.STREAMS_ADDRESS_REQUEST.payloadMsg(
-                new StreamsAddressRequest(streamsAddressesRange)));
+    public CompletableFuture<StreamsAddressResponse> getStreamsAddressSpace(
+            List<StreamAddressRange> streamsAddressesRange
+    ) {
+        return sendRequestWithFuture(getStreamsAddressRequestMsg(streamsAddressesRange),
+                false, false);
     }
 
     /**
@@ -69,12 +78,13 @@ public class SequencerClient extends AbstractClient {
      */
     public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens,
                                                       TxResolutionInfo conflictInfo) {
-        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
-                new TokenRequest(numTokens, streamIDs, conflictInfo)));
+        return sendRequestWithFuture(getTokenRequestMsg(numTokens, streamIDs, conflictInfo),
+                false, false);
     }
 
     public CompletableFuture<Void> trimCache(Long address) {
-        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_TRIM_REQ.payloadMsg(address));
+        return sendRequestWithFuture(getSequencerTrimRequestMsg(address),
+                false, false);
     }
 
     /**
@@ -91,9 +101,14 @@ public class SequencerClient extends AbstractClient {
     public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, StreamAddressSpace> streamAddressSpaceMap,
                                                 Long readyStateEpoch,
                                                 boolean bootstrapWithoutTailsUpdate) {
-        return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
-                new SequencerRecoveryMsg(initialToken, streamAddressSpaceMap, readyStateEpoch,
-                        bootstrapWithoutTailsUpdate)));
+        return sendRequestWithFuture(
+                getBootstrapSequencerRequestMsg(
+                    streamAddressSpaceMap,
+                    initialToken,
+                    readyStateEpoch,
+                    bootstrapWithoutTailsUpdate),
+                false,
+                false);
     }
 
     /**

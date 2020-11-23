@@ -26,6 +26,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
@@ -396,7 +397,8 @@ public class CheckpointTest extends AbstractObjectTest {
         CorfuRuntime rt = getNewRuntime();
 
         TestRule dropSequencerTrim = new TestRule()
-                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SEQUENCER_TRIM_REQ))
+                .requestMatches(msg -> msg.getPayload().getPayloadCase()
+                        .equals(CorfuMessage.RequestPayloadMsg.PayloadCase.SEQUENCER_TRIM_REQUEST))
                 .drop();
         addClientRule(rt, dropSequencerTrim);
 
