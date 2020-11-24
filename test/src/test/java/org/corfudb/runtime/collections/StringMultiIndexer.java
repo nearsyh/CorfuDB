@@ -32,10 +32,9 @@ public class StringMultiIndexer implements Index.Registry<String, String> {
     }
 
     @Override
-    public Iterator<Index.Spec<String, String, ? extends Comparable<?>>> iterator() {
-        final List<Index.Spec<String, String, ? extends Comparable<?>>> indices = new ArrayList<>();
+    public Iterator<Index.Spec<String, String, ?>> iterator() {
+        final List<Index.Spec<String, String, ?>> indices = new ArrayList<>();
         indices.add(BY_WORD_INDEX);
         return indices.iterator();
-
     }
 }
