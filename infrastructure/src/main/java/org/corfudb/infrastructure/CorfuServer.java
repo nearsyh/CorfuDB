@@ -9,6 +9,7 @@ import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.MetricsServer;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Map;
 
 
@@ -191,6 +193,9 @@ public class CorfuServer {
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
+    private static final String DEFAULT_METRICS_LOGGER_NAME = "CorfuMetrics";
+
+    private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL_DURATION = Duration.ofSeconds(1);
     /**
      * Main program entry point.
      *
@@ -218,6 +223,23 @@ public class CorfuServer {
         } catch (Throwable err) {
             log.error("Exit. Unrecoverable error", err);
             throw err;
+        }
+    }
+
+    public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
+        if ((boolean) opts.get("--metrics")) {
+            org.apache.logging.log4j.spi.LoggerContext loggerContext =
+                    (org.apache.logging.log4j.spi.LoggerContext) LoggerFactory.getILoggerFactory();
+            if (loggerContext.hasLogger(DEFAULT_METRICS_LOGGER_NAME)) {
+                org.apache.logging.log4j.Logger logger =
+                        loggerContext.getLogger(DEFAULT_METRICS_LOGGER_NAME);
+                MeterRegistryProvider.MeterRegistryInitializer
+                        .init(logger, DEFAULT_METRICS_LOGGING_INTERVAL_DURATION,
+                                localEndpoint);
+            }
+            else {
+                log.warn("Logger for metrics not found. Disabling server metrics.");
+            }
         }
     }
 
@@ -260,7 +282,7 @@ public class CorfuServer {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             try {
-                setupMetrics(opts);
+                configureMetrics(opts, serverContext.getLocalEndpoint());
                 activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();
             } catch (Throwable th) {
