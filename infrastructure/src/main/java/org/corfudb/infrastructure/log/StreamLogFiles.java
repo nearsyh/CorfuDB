@@ -1427,7 +1427,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     private void cleanUpGauges() {
         String unitTag = "unit";
-        ImmutableList.of(Tags.of(unitTag, "bytes"), Tags.of(unitTag, "entries"), Tags.of("segments"))
+        ImmutableList.of(Tags.of(unitTag, "bytes"), Tags.of(unitTag, "entries"), Tags.of(unitTag, "segments"))
                 .forEach(tags -> MeterRegistryProvider
                         .deregisterServerMeter(logUnitSizeMetricName, tags, Meter.Type.GAUGE));
         MeterRegistryProvider.deregisterServerMeter(logUnitTrimMarkMetricName, Tags.empty(),
