@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 
 /**
@@ -193,9 +194,9 @@ public class CorfuServer {
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
-    private static final String DEFAULT_METRICS_LOGGER_NAME = "CorfuMetrics";
+    private static final String DEFAULT_METRICS_LOGGER_NAME = "org.corfudb.metricsdata";
 
-    private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL_DURATION = Duration.ofSeconds(1);
+    private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL = Duration.ofMinutes(1);
     /**
      * Main program entry point.
      *
@@ -228,18 +229,10 @@ public class CorfuServer {
 
     public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
         if ((boolean) opts.get("--metrics")) {
-            org.apache.logging.log4j.spi.LoggerContext loggerContext =
-                    (org.apache.logging.log4j.spi.LoggerContext) LoggerFactory.getILoggerFactory();
-            if (loggerContext.hasLogger(DEFAULT_METRICS_LOGGER_NAME)) {
-                org.apache.logging.log4j.Logger logger =
-                        loggerContext.getLogger(DEFAULT_METRICS_LOGGER_NAME);
-                MeterRegistryProvider.MeterRegistryInitializer
-                        .init(logger, DEFAULT_METRICS_LOGGING_INTERVAL_DURATION,
-                                localEndpoint);
-            }
-            else {
-                log.warn("Logger for metrics not found. Disabling server metrics.");
-            }
+            LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
+            Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
+                    .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.init(logger,
+                            DEFAULT_METRICS_LOGGING_INTERVAL, localEndpoint));
         }
     }
 

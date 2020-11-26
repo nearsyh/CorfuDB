@@ -78,8 +78,6 @@ public class BatchProcessor implements AutoCloseable {
         this.sync = sync;
         this.streamLog = streamLog;
         operationsQueue = new LinkedBlockingQueue<>();
-        processorService.submit(this::processor);
-
         writeRecordTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("logunit.write.timer")
                         .tags("type", "single").register(registry));
@@ -93,6 +91,7 @@ public class BatchProcessor implements AutoCloseable {
                         .publishPercentileHistogram()
                         .baseUnit("op")
                         .register(registry));
+        processorService.submit(this::processor);
     }
 
     /**
@@ -105,6 +104,14 @@ public class BatchProcessor implements AutoCloseable {
         BatchWriterOperation<T> operation = new BatchWriterOperation<>(type, msg);
         operationsQueue.add(operation);
         return operation.getFutureResult();
+    }
+
+    private void recordRunnable(Runnable fsyncRunnable, Optional<Timer> fsyncTimer) {
+        if (fsyncTimer.isPresent()) {
+            fsyncTimer.get().record(fsyncRunnable);
+        } else {
+            fsyncRunnable.run();
+        }
     }
 
     private void processor() {
@@ -129,7 +136,6 @@ public class BatchProcessor implements AutoCloseable {
                     if (currOp == null || processed == BATCH_SIZE
                             || currOp == BatchWriterOperation.SHUTDOWN) {
                         streamLog.sync(sync);
-
                         log.trace("Completed {} operations", processed);
 
                         for (BatchWriterOperation operation : res) {
@@ -150,7 +156,6 @@ public class BatchProcessor implements AutoCloseable {
                 } else if (currOp == BatchWriterOperation.SHUTDOWN) {
                     log.warn("Shutting down the write processor");
                     streamLog.sync(true);
-
                     break;
                 } else if (streamLog.quotaExceeded() && currOp.getMsg().getPriorityLevel() != PriorityLevel.HIGH) {
                     currOp.getFutureResult().completeExceptionally(
@@ -181,22 +186,12 @@ public class BatchProcessor implements AutoCloseable {
                                 WriteRequest write = (WriteRequest) currOp.getMsg().getPayload();
                                 Runnable append =
                                         () -> streamLog.append(write.getGlobalAddress(), (LogData) write.getData());
-                                if (writeRecordTimer.isPresent()) {
-                                    writeRecordTimer.get().record(append);
-                                }
-                                else {
-                                    append.run();
-                                }
+                                recordRunnable(append, writeRecordsTimer);
                                 break;
                             case RANGE_WRITE:
                                 RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();
                                 Runnable appendMultiple = () -> streamLog.append(writeRange.getEntries());
-                                if (writeRecordsTimer.isPresent()) {
-                                    writeRecordsTimer.get().record(appendMultiple);
-                                }
-                                else {
-                                    appendMultiple.run();
-                                }
+                                recordRunnable(appendMultiple, writeRecordsTimer);
                                 break;
                             case RESET:
                                 streamLog.reset();

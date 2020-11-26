@@ -241,12 +241,12 @@ public class AddressSpaceView extends AbstractView {
 
             logSizeDist.ifPresent(dist -> dist.record(ld.getSizeEstimate()));
             layoutHelper(e -> {
-                Layout l = e.getLayout();
+                Layout layout = e.getLayout();
                 // Check if the token issued is in the same
                 // epoch as the layout we are about to write
                 // to.
-                if (token.getEpoch() != l.getEpoch()) {
-                    throw new StaleTokenException(l.getEpoch());
+                if (token.getEpoch() != layout.getEpoch()) {
+                    throw new StaleTokenException(layout.getEpoch());
                 }
 
                 // Set the data to use the token
@@ -255,7 +255,7 @@ public class AddressSpaceView extends AbstractView {
 
                 // Do the write
                 try {
-                    l.getReplicationMode(token.getSequence())
+                    layout.getReplicationMode(token.getSequence())
                             .getReplicationProtocol(runtime)
                             .write(e, ld);
                 } catch (OverwriteException ex) {

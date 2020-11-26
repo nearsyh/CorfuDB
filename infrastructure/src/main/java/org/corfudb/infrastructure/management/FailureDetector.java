@@ -284,7 +284,7 @@ public class FailureDetector implements IDetector {
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
         allServers.forEach(s -> {
             try {
-                registerTimerForNodeIfNeeded(s);
+                MeterRegistryProvider.timer("failure-detector.ping-latency", "node", s);
                 Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
                 CompletableFuture<NodeState> nodeStateFuture =
                         MicroMeterUtils.timeWhenCompletes(new ManagementClient(clientRouters.get(s), epoch, clusterId)

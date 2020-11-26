@@ -94,7 +94,7 @@ public class SequencerServerCache {
         this.cacheSize = cacheSize;
 
         cacheEntries = new PriorityQueue(cacheSize, Comparator.comparingLong
-                (a -> ((ConflictTxStream) a).txVersion));
+                (conflict -> ((ConflictTxStream) conflict).txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
         conflictKeys = MeterRegistryProvider
