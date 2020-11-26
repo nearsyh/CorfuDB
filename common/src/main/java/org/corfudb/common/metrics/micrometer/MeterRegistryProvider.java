@@ -81,7 +81,7 @@ public class MeterRegistryProvider {
      * @param name Name of a timer.
      * @param tags Tags for a timer. 
      */
-    public void timer(String name, String... tags) {
+    public static void timer(String name, String... tags) {
         MeterRegistryProvider.getInstance().ifPresent(registry -> registry.timer(name, tags));
     }
 

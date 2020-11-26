@@ -254,7 +254,7 @@ public class CorfuRuntime {
          */
         private MetricRegistry metricRegistry;
 
-        private final MicroMeterRuntimeConfig microMeterRuntimeConfig;
+        private MicroMeterRuntimeConfig microMeterRuntimeConfig;
 
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
             int maxWriteSize = Integer.MAX_VALUE;
